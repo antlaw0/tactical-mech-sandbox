@@ -20,3 +20,18 @@
 #board .scrap::before{background:#515c66;transform:rotate(12deg)}
 #board .targeted{outline:4px solid #00b9a4;outline-offset:-4px}
 #board .los-blocker{box-shadow:inset 0 0 0 4px #e76c00}
+
+#board .cursor{border:4px dashed #111;box-shadow:inset 0 0 0 3px #00e5ff}
+#board span[data-square]{cursor:pointer}
+#cursorControls{text-align:left;margin:1rem auto;max-width:680px}
+#cursorPad{background:#152d43;color:white;padding:1rem;border:2px solid #35465a;border-radius:.4rem;font-weight:bold}
+#cursorPad:focus{outline:4px solid #e6a000;outline-offset:3px}
+#cursorDirections{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.4rem;max-width:420px;margin:auto}
+#cursorDirections button:first-child{grid-column:2;grid-row:1}
+#cursorDirections button:nth-child(2){grid-column:1;grid-row:2}
+#cursorDirections button:nth-child(3){grid-column:2;grid-row:2}
+#cursorDirections button:nth-child(4){grid-column:3;grid-row:2}
+#cursorActions{display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+#cursorInfo{font-weight:bold;min-height:3em}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+@media(max-width:480px){#board .cursor{border-width:2px;box-shadow:inset 0 0 0 2px #00e5ff}#cursorDirections button{padding:.25rem;font-size:.85rem}}
