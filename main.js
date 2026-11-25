@@ -1,0 +1,91 @@
+import * as E from './engine.js';
+import * as A from './audio.js';
+const $=id=>document.getElementById(id);
+let g,unitId,targetId,delay=0;
+const active=()=>g.units.find(u=>u.id===unitId);
+const target=()=>g.units.find(u=>u.id===targetId);
+function report(msg,sound=''){
+ if(!msg)return;
+ const li=document.createElement('li');li.textContent=msg;$('log').prepend(li);
+ $('announcement').textContent=msg;
+ if(sound){A.play(sound,delay);delay+=.35;} // sound sequence
+} // report
+function options(el,items,selected){
+ el.replaceChildren();
+ for(const [value,label] of items){
+  const o=document.createElement('option');o.value=value;o.textContent=label;el.append(o);
+ } // options loop
+ if(items.some(i=>i[0]===selected))el.value=selected;
+} // options
+function relative(a,b){
+ const dx=b.x-a.x,dy=b.y-a.y;
+ return [dy?Math.abs(dy)+' '+(dy<0?'north':'south'):'',dx?Math.abs(dx)+' '+(dx<0?'west':'east'):''].filter(Boolean).join(', ')||'same square';
+} // relative
+function describe(a,b){
+ return b.name+', '+E.coord(b.x,b.y)+', '+relative(a,b)+', range '+E.distance(a,b)+', '+b.hp+' of '+b.max+' armor, '+(E.sight(a,b)?'clear line of sight':'blocked line of sight')+', '+(E.cover(b)?'cover':'open');
+} // describe
+function render(){
+ const friends=g.units.filter(u=>u.team==='friendly'&&E.alive(u)), enemies=g.units.filter(u=>u.team==='enemy'&&E.alive(u));
+ options($('unit'),friends.map(u=>[u.id,u.name]),unitId);unitId=$('unit').value;
+ options($('target'),enemies.map(u=>[u.id,u.name]),targetId);targetId=$('target').value;
+ const a=active(),b=target(),end=E.outcome(g);
+ g.done=!!end;$('round').textContent=end||'Round '+g.round;
+ $('stats').textContent=a?a.name+' at '+E.coord(a.x,a.y)+'. Armor '+a.hp+' of '+a.max+'. Movement '+a.mp+'. Actions '+a.ap+'.':'No surviving friendly units.';
+ $('targetInfo').textContent=a&&b?describe(a,b):'No target available.';
+ const buttons=$('weapons');buttons.replaceChildren();
+ for(const w of E.weapons){
+  const btn=document.createElement('button');btn.textContent=w.name+' (range '+w.min+' to '+w.max+', damage '+w.damage+')';
+  btn.disabled=g.done||!a||!b||!E.canFire(a,b,w);
+  btn.onclick=()=>{delay=0;report(E.fire(a,b,w),w.kind);finish();render();$('target').focus();}; // fire handler
+  buttons.append(btn);
+ } // weapons
+ const dest=a&&!g.done?E.reachable(g,a):[];
+ const old=$('destination').value;
+ options($('destination'),dest.map(p=>[E.key(p.x,p.y),E.coord(p.x,p.y)+', '+relative(a,p)+', cost '+p.cost+', '+(E.cover(p)?'cover':'open')+(b&&E.sight(p,b)?', clear shot at '+b.name:'')]),old);
+ $('move').disabled=!dest.length;
+ for(const btn of $('directions').querySelectorAll('button')){
+  const [dx,dy]=btn.dataset.dir.split(',').map(Number);
+  btn.disabled=g.done||!a||!dest.some(p=>p.x===a.x+dx&&p.y===a.y+dy&&p.cost===1);
+ } // direction controls
+ $('end').disabled=g.done;$('unit').disabled=!friends.length||g.done;$('target').disabled=!enemies.length||g.done;
+ $('destination').disabled=!dest.length;
+ const board=$('board');board.replaceChildren();
+ for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+  const cell=document.createElement('span'),u=g.units.find(u=>E.alive(u)&&u.x===x&&u.y===y);
+  cell.className=u?u.team+(u.id===unitId?' selected':''):E.walls.has(E.key(x,y))?'wall':'empty';
+  cell.textContent=u?u.name[0]:E.walls.has(E.key(x,y))?'#':E.coord(x,y);board.append(cell);
+ } // board cells
+} // render
+function finish(){
+ const end=E.outcome(g);if(end&&!g.done){g.done=true;report(end,end.startsWith('Victory')?'victory':'defeat');} // end
+} // finish
+function moveTo(x,y){
+ delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
+} // moveTo
+function start(){
+ g=E.newGame();unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;render();report('Mission started. Round 1. Select a friendly mech.','turn');$('unit').focus();
+} // start
+$('start').onclick=()=>{A.init();start();}; // start button
+$('restart').onclick=start;
+$('sound').onchange=()=>A.settings($('sound').checked,Number($('volume').value)/100);
+$('volume').oninput=$('sound').onchange;
+$('unit').onchange=()=>{unitId=$('unit').value;A.play('select');render();report($('stats').textContent);}; // unit selection
+$('target').onchange=()=>{targetId=$('target').value;A.play('select');render();report($('targetInfo').textContent);}; // target selection
+$('move').onclick=()=>moveTo(...$('destination').value.split(',').map(Number));
+for(const btn of $('directions').querySelectorAll('button'))btn.onclick=()=>{const [dx,dy]=btn.dataset.dir.split(',').map(Number),a=active();moveTo(a.x+dx,a.y+dy);}; // direction handler
+$('scan').onclick=()=>{
+ const a=active();const msg='Round '+g.round+'. '+g.units.filter(E.alive).map(u=>a?describe(a,u):u.name+' at '+E.coord(u.x,u.y)).join('. ')+'.';
+ $('scanResult').textContent=msg;report(msg);
+}; // scan
+$('terrain').onclick=()=>{
+ const a=active();if(!a)return;
+ const msg='Obstacles near '+a.name+': '+[...E.walls].map(k=>{const [x,y]=k.split(',').map(Number);return {x,y};}).filter(p=>E.distance(a,p)<=4).map(p=>E.coord(p.x,p.y)+', '+relative(a,p)).join('; ')+'. '+E.reachable(g,a).length+' reachable destinations.';
+ $('scanResult').textContent=msg;report(msg);
+}; // terrain
+$('end').onclick=()=>{
+ if(g.done)return;delay=0;const entries=[];
+ E.enemyRound(g,(msg,sound)=>{entries.push(msg);report(msg,sound);});
+ finish();render();
+ if(!g.done){report('Round '+g.round+'. Friendly turn.','turn');$('announcement').textContent=entries.join(' ')+' Round '+g.round+'. Friendly turn.';$('unit').focus();}
+ else {$('announcement').textContent=entries.join(' ')+' '+E.outcome(g);$('restart').focus();} // round end focus
+}; // enemy round
