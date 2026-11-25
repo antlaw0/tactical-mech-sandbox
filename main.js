@@ -1,5 +1,5 @@
-import * as E from './engine.js?v=3';
-import * as A from './audio.js';
+import * as E from './engine.js?v=5';
+import * as A from './audio.js?v=5';
 const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
 const active=()=>g.units.find(u=>u.id===unitId);
@@ -8,7 +8,7 @@ function report(msg,sound=''){
  if(!msg)return;
  const li=document.createElement('li');li.textContent=msg;$('log').prepend(li);
  $('announcement').textContent=msg;
- if(sound){A.play(sound,delay);delay+=.35;} // sound sequence
+ if(sound){A.play(sound,delay);if(['gun','laser','missile'].includes(sound)){A.play(msg.includes('. Miss.')?'miss':'hit',delay+(sound==='missile'?.65:.35));delay+=.85;}else delay+=.35;} // sound sequence
 } // report
 function options(el,items,selected){
  el.replaceChildren();
@@ -53,10 +53,10 @@ function setCursor(x,y){
  if(x<0||x>9||y<0||y>9){$('cursorSpeech').textContent='Battlefield edge. '+E.coord(cursor.x,cursor.y);return;} // boundary
  cursor={x,y};refreshCursor(true);A.play('select');
 } // setCursor
-function selectCursor(){
+function selectCursor(restoreFocus=true){
  const u=cursorUnit();if(!u||g.done)return;
  if(u.team==='friendly')unitId=u.id;else targetId=u.id;
- render();report(u.team==='friendly'?'Commanding '+u.name:'Targeting '+u.name+'. '+$('targetInfo').textContent);$('cursorPad').focus();
+ render();report(u.team==='friendly'?'Commanding '+u.name:'Targeting '+u.name+'. '+$('targetInfo').textContent);if(restoreFocus===true)$('cursorPad').focus();
 } // selectCursor
 function render(){
  const friends=g.units.filter(u=>u.team==='friendly'&&E.alive(u)), enemies=g.units.filter(u=>u.team==='enemy'&&E.alive(u));
@@ -69,8 +69,15 @@ function render(){
  const buttons=$('weapons');buttons.replaceChildren();
  for(const w of E.weapons){
   const btn=document.createElement('button');btn.textContent=w.name+' (range '+w.min+' to '+w.max+', damage '+w.damage+')';
+  btn.dataset.weapon=w.kind;
   btn.disabled=g.done||!a||!b||!E.canFire(a,b,w,g);
-  btn.onclick=()=>{delay=0;report(E.fire(a,b,w,g),w.kind);finish();render();$('target').focus();}; // fire handler
+  btn.onclick=()=>{
+   delay=0;A.init();const result=E.fire(a,b,w,g);
+   report(result,w.kind);finish();render();
+   $('fireResult').textContent=result+(g.done?' '+E.outcome(g):'');
+   const next=[...$('weapons').querySelectorAll('button')].find(el=>el.dataset.weapon===w.kind&&!el.disabled);
+   if(next)next.focus();else $('fireResult').focus();
+  }; // fire handler
   buttons.append(btn);
  } // weapons
  const dest=a&&!g.done?E.reachable(g,a):[];
@@ -86,25 +93,41 @@ function render(){
  } // direction controls
  $('end').disabled=g.done;$('unit').disabled=!friends.length||g.done;$('target').disabled=!enemies.length||g.done;
  $('destination').disabled=!dest.length;
- const board=$('board');board.replaceChildren();
+ const board=$('board');
+ const oldCells=new Map([...board.querySelectorAll('[data-square]')].map(el=>[el.dataset.square,el]));
+ const firstBuild=oldCells.size===0;
  const blockers=a&&b?E.sightBlockers(a,b,g):[];
  function axis(label){
   const cell=document.createElement('span');cell.className='axis';cell.textContent=label;board.append(cell);
  } // axis
- axis('');for(let x=0;x<10;x++)axis(String(x+1)); 
+ if(firstBuild){axis('');for(let x=0;x<10;x++)axis(String(x+1));} // axis header 
  for(let y=0;y<10;y++){
- axis(String.fromCharCode(65+y));
+ if(firstBuild)axis(String.fromCharCode(65+y));
  for(let x=0;x<10;x++){
-  const cell=document.createElement('span'),u=g.units.find(u=>E.alive(u)&&u.x===x&&u.y===y);
+  const cell=oldCells.get(E.key(x,y))||document.createElement('button'),u=g.units.find(u=>E.alive(u)&&u.x===x&&u.y===y);
   cell.className=u?u.team+(u.id===unitId?' selected':''):E.walls.has(E.key(x,y))?'wall':'empty';
   if(u&&u.id===targetId)cell.classList.add('targeted');
   if(blockers.some(p=>p.x===x&&p.y===y))cell.classList.add('los-blocker');
   const type=E.terrain.get(E.key(x,y));
   if(type)cell.classList.add(type==='rock'?'rock':type==='scrap barricade'?'scrap':'barrier');
   cell.dataset.square=E.key(x,y);
-  cell.onclick=()=>{setCursor(x,y);}; // pointer exploration
+  cell.type='button';
+  const p=dest.find(p=>p.x===x&&p.y===y);
+  const description=E.coord(x,y)+', '+(u?(u.team==='friendly'?'friendly':'enemy')+' mech '+u.name+', armor '+u.hp+' of '+u.max+(u.id===unitId?', active mech':u.id===targetId?', selected target':''):type||'open ground')+(p?', reachable, cost '+p.cost:'');
+  cell.setAttribute('aria-label',description+(g.done?'':u?(u.team==='friendly'?', command unit':', select target'):p?', select movement destination':', inspect'));
+  cell.onfocus=()=>{cursor={x,y};refreshCursor(false);}; // keyboard focus
+  cell.onclick=()=>{
+   cursor={x,y};refreshCursor(false);
+   if(u&&!g.done){selectCursor(false);}
+   else if(p&&!g.done){$('destination').value=E.key(x,y);report('Destination '+E.coord(x,y)+' selected. Activate Move mech to cursor to confirm.');}
+   else $('cursorSpeech').textContent=$('cursorInfo').textContent;
+  }; // contextual activation
+  cell.onkeydown=event=>{
+   const d={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[event.key];
+   if(d){event.preventDefault();const next=board.querySelector('[data-square="'+E.key(x+d[0],y+d[1])+'"]');if(next)next.focus();}
+  }; // native button keyboard exploration
   cell.title=E.coord(x,y)+': '+(u?u.name:type||'open ground');
-  cell.textContent=u?u.name[0]:type? (type==='rock'?'R':type==='scrap barricade'?'S':'B'):E.coord(x,y);board.append(cell);
+  cell.textContent=u?u.name[0]:type? (type==='rock'?'R':type==='scrap barricade'?'S':'B'):E.coord(x,y);if(firstBuild)board.append(cell);
  } // board cells
  } // board rows
  refreshCursor();
@@ -116,7 +139,7 @@ function moveTo(x,y){
  delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
 } // moveTo
 function start(){
- g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;render();report('Mission started. Round 1. Explore the battlefield using arrow keys.','turn');$('cursorPad').focus();
+ g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;render();report('Mission started. Round 1. Explore the battlefield using arrow keys.','turn');$('cursorPad').focus();
 } // start
 $('start').onclick=()=>{A.init();start();}; // start button
 $('restart').onclick=start;
@@ -155,5 +178,5 @@ for(const btn of $('cursorDirections').querySelectorAll('button')){
 } // directional buttons
 $('cursorHome').onclick=()=>{const a=active();if(a)setCursor(a.x,a.y);}; // jump home
 $('cursorTarget').onclick=()=>{const b=target();if(b)setCursor(b.x,b.y);}; // jump target
-$('cursorSelect').onclick=selectCursor;
+$('cursorSelect').onclick=()=>selectCursor();
 $('cursorMove').onclick=()=>{moveTo(cursor.x,cursor.y);$('cursorPad').focus();}; // explicit move
