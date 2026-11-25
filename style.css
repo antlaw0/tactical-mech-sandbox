@@ -48,3 +48,22 @@
 #board button[data-square]::before{pointer-events:none}
 #board .axis{pointer-events:none}
 @media(max-width:600px){#board{width:100%;gap:1px;padding:1px;border-width:1px}#battlefield{padding:0;border:0}main{padding:.15rem}#board button[data-square]{font-size:clamp(.6rem,2.2vw,1rem)}}
+
+/* A fixed mission viewport: board never scrolls; command controls scroll independently. */
+body.in-mission{overflow:hidden}
+body.in-mission>header{display:none}
+body.in-mission main{padding:0;max-width:none}
+body.in-mission #audioSettings{display:none}
+body.in-mission #game{position:fixed;inset:0;display:flex;flex-direction:column;align-items:stretch;background:#111923;height:100dvh}
+body.in-mission #battlefield{flex:none;margin:0;padding:0;border:0;border-radius:0;background:#000}
+body.in-mission #board{width:min(100vw,56dvh,680px);max-width:none;margin:0 auto;gap:2px;padding:2px;border:0}
+body.in-mission #missionControls{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:.5rem 1rem 1rem;width:100%;max-width:850px;margin:0 auto}
+body.in-mission #missionControls .legend{display:none}
+#squareMenu{position:fixed;margin:0;inset:auto;max-width:min(340px,95vw);width:340px;max-height:75dvh;overflow:auto;background:#182c40;color:#fff;border:3px solid #a8c9eb;border-radius:.5rem;padding:.65rem}
+#squareMenu::backdrop{background:rgba(0,0,0,.12)}
+#squareMenu h2{font-size:1.05rem;margin:.25rem 0}
+#squareActions{display:flex;flex-direction:column;gap:.25rem}
+#squareActions button{text-align:left;line-height:1.35;margin:0}
+#squareActions button[aria-disabled=true]{background:#333;color:#e4e4e4}
+#menuFeedback:empty{display:none}
+@media(orientation:portrait) and (max-width:600px){body.in-mission #board{width:min(100vw,65dvh);gap:1px;padding:1px}}
