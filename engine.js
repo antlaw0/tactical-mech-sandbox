@@ -65,11 +65,14 @@ export function sight(a,b,g){
 export function canFire(a,b,w,g){
  return alive(a)&&alive(b)&&a.team!==b.team&&a.ap>0&&distance(a,b)>=w.min&&distance(a,b)<=w.max&&sight(a,b,g);
 } // canFire
-export function fire(a,b,w,g){
+export function fire(a,b,w,g,random=Math.random){
  if(!canFire(a,b,w,g))return null;
- a.ap--;const damage=cover(b)?Math.floor(w.damage*0.65):w.damage;
+ a.ap--;
+ const chance=cover(b)?0.70:0.90;
+ if(random()>=chance)return a.name+' fires '+w.name+' at '+b.name+'. Miss. Zero damage.';
+ const damage=Math.min(b.hp,cover(b)?Math.floor(w.damage*0.65):w.damage);
  b.hp=Math.max(0,b.hp-damage);
- return a.name+' fires '+w.name+' at '+b.name+' for '+damage+' damage. '+(alive(b)?b.hp+' armor remaining.':'Target destroyed.');
+ return a.name+' fires '+w.name+' at '+b.name+'. Hit. '+damage+' damage. '+(alive(b)?b.hp+' armor remaining.':'Target destroyed.');
 } // fire
 export function move(g,u,x,y){
  const p=reachable(g,u).find(p=>p.x===x&&p.y===y);
