@@ -3,9 +3,10 @@ export const weapons = [
  {name:'Laser', min:1,max:6,damage:16,kind:'laser'}, // weapon
  {name:'Missile', min:3,max:8,damage:30,kind:'missile'} // weapon
 ]; 
-export const walls = new Set(['3,3','3,4','3,5','6,5','6,6','7,2','7,3']);
+export const terrain = new Map([['3,3','concrete barrier'],['3,4','concrete barrier'],['3,5','concrete barrier'],['6,5','rock'],['6,6','rock'],['7,2','scrap barricade'],['7,3','scrap barricade']]);
+export const walls = new Set(terrain.keys());
 export const key=(x,y)=>x+','+y;
-export const coord=(x,y)=>String.fromCharCode(65+x)+(y+1);
+export const coord=(x,y)=>String.fromCharCode(65+y)+(x+1);
 export const distance=(a,b)=>Math.abs(a.x-b.x)+Math.abs(a.y-b.y);
 export const alive=u=>u.hp>0;
 export function newGame(){
@@ -36,25 +37,36 @@ export function reachable(g,u){
  } // queue
  return q.slice(1);
 } // reachable
-export function sight(a,b){
- // Grid traversal; conservative corner blocking.
+export function sightBlockers(a,b,g){
+ const blockers=[],seen=new Set();
+ function inspect(x,y){
+  if((x===a.x&&y===a.y)||(x===b.x&&y===b.y))return;
+  const k=key(x,y);if(seen.has(k))return;seen.add(k);
+  const type=terrain.get(k);
+  const u=g?.units.find(u=>alive(u)&&u.id!==a.id&&u.id!==b.id&&u.x===x&&u.y===y);
+  if(type)blockers.push({x,y,type}); // terrain blocker
+  else if(u)blockers.push({x,y,type:u.team+' mech '+u.name}); // unit blocker
+ } // inspect
  let x=a.x,y=a.y;const dx=b.x-x,dy=b.y-y,nx=Math.abs(dx),ny=Math.abs(dy),sx=Math.sign(dx),sy=Math.sign(dy);
  let ix=0,iy=0;
  while(ix<nx||iy<ny){
   const d=(1+2*ix)*ny-(1+2*iy)*nx;
   if(d===0){
-   if(walls.has(key(x+sx,y))||walls.has(key(x,y+sy)))return false;
+   inspect(x+sx,y);inspect(x,y+sy);
    x+=sx;y+=sy;ix++;iy++;
   }else if(d<0){x+=sx;ix++;}else{y+=sy;iy++;} // grid step
-  if(walls.has(key(x,y)))return false;
+  inspect(x,y);
  } // traversal
- return true;
+ return blockers;
+} // sightBlockers
+export function sight(a,b,g){
+ return sightBlockers(a,b,g).length===0;
 } // sight
-export function canFire(a,b,w){
- return alive(a)&&alive(b)&&a.team!==b.team&&a.ap>0&&distance(a,b)>=w.min&&distance(a,b)<=w.max&&sight(a,b);
+export function canFire(a,b,w,g){
+ return alive(a)&&alive(b)&&a.team!==b.team&&a.ap>0&&distance(a,b)>=w.min&&distance(a,b)<=w.max&&sight(a,b,g);
 } // canFire
-export function fire(a,b,w){
- if(!canFire(a,b,w))return null;
+export function fire(a,b,w,g){
+ if(!canFire(a,b,w,g))return null;
  a.ap--;const damage=cover(b)?Math.floor(w.damage*0.65):w.damage;
  b.hp=Math.max(0,b.hp-damage);
  return a.name+' fires '+w.name+' at '+b.name+' for '+damage+' damage. '+(alive(b)?b.hp+' armor remaining.':'Target destroyed.');
@@ -75,14 +87,14 @@ export function enemyRound(g,report){
   const foes=g.units.filter(u=>u.team==='friendly'&&alive(u));
   if(!foes.length)break;
   let target=foes.sort((a,b)=>distance(e,a)-distance(e,b))[0];
-  const choose=()=>weapons.filter(w=>canFire(e,target,w)).sort((a,b)=>b.damage-a.damage)[0];
+  const choose=()=>weapons.filter(w=>canFire(e,target,w,g)).sort((a,b)=>b.damage-a.damage)[0];
   let w=choose();
   if(!w){
-   const spots=reachable(g,e).sort((a,b)=> (distance(a,target)+(!sight(a,target)?5:0))-(distance(b,target)+(!sight(b,target)?5:0)));
+   const spots=reachable(g,e).sort((a,b)=> (distance(a,target)+(!sight({...e,...a},target,g)?5:0))-(distance(b,target)+(!sight({...e,...b},target,g)?5:0)));
    if(spots.length&&move(g,e,spots[0].x,spots[0].y))report(e.name+' moves to '+coord(e.x,e.y)+'.','move');
    w=choose();
   } // movement
-  if(w)report(fire(e,target,w),w.kind);
+  if(w)report(fire(e,target,w,g),w.kind);
   else report(e.name+' holds fire.','');
  } // enemy loop
  if(!outcome(g)){
