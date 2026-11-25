@@ -28,6 +28,8 @@ export function play(kind,delay=0){
  case 'gun':for(let i=0;i<3;i++)noise(.12,.35,1500,delay+i*.09);break;
  case 'laser':tone(1400,180,.34,.2,'sawtooth',delay);break;
  case 'missile':noise(.55,.3,850,delay);tone(110,45,.6,.22,'triangle',delay+.15);break;
+ case 'hit':noise(.19,.45,2200,delay);tone(130,45,.22,.3,'triangle',delay);break;
+ case 'miss':tone(620,170,.22,.13,'sine',delay);break;
  case 'victory': [440,554,659,880].forEach((f,i)=>tone(f,f,.3,.16,'triangle',delay+i*.15));break;
  case 'defeat':tone(220,50,.7,.16,'triangle',delay);break;
  case 'turn':tone(520,780,.16,.15,'sine',delay);break;
