@@ -1,4 +1,4 @@
-import * as E from './engine.js';
+import * as E from './engine.js?v=3';
 import * as A from './audio.js';
 const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0;
@@ -21,8 +21,12 @@ function relative(a,b){
  const dx=b.x-a.x,dy=b.y-a.y;
  return [dy?Math.abs(dy)+' '+(dy<0?'north':'south'):'',dx?Math.abs(dx)+' '+(dx<0?'west':'east'):''].filter(Boolean).join(', ')||'same square';
 } // relative
+function losText(a,b){
+ const blockers=E.sightBlockers(a,b,g);
+ return blockers.length?'Line of sight blocked by '+blockers.map(p=>p.type+' at '+E.coord(p.x,p.y)).join('; '):'Clear line of sight';
+} // losText
 function describe(a,b){
- return b.name+', '+E.coord(b.x,b.y)+', '+relative(a,b)+', range '+E.distance(a,b)+', '+b.hp+' of '+b.max+' armor, '+(E.sight(a,b)?'clear line of sight':'blocked line of sight')+', '+(E.cover(b)?'cover':'open');
+ return b.name+', '+E.coord(b.x,b.y)+', '+relative(a,b)+', range '+E.distance(a,b)+', '+b.hp+' of '+b.max+' armor, '+losText(a,b)+', '+(E.cover(b)?'cover':'open');
 } // describe
 function render(){
  const friends=g.units.filter(u=>u.team==='friendly'&&E.alive(u)), enemies=g.units.filter(u=>u.team==='enemy'&&E.alive(u));
@@ -35,13 +39,16 @@ function render(){
  const buttons=$('weapons');buttons.replaceChildren();
  for(const w of E.weapons){
   const btn=document.createElement('button');btn.textContent=w.name+' (range '+w.min+' to '+w.max+', damage '+w.damage+')';
-  btn.disabled=g.done||!a||!b||!E.canFire(a,b,w);
-  btn.onclick=()=>{delay=0;report(E.fire(a,b,w),w.kind);finish();render();$('target').focus();}; // fire handler
+  btn.disabled=g.done||!a||!b||!E.canFire(a,b,w,g);
+  btn.onclick=()=>{delay=0;report(E.fire(a,b,w,g),w.kind);finish();render();$('target').focus();}; // fire handler
   buttons.append(btn);
  } // weapons
  const dest=a&&!g.done?E.reachable(g,a):[];
+ const clear= a&&b?dest.filter(p=>E.sight({...a,...p},b,g)):[];
+ const firing=clear.filter(p=>E.weapons.some(w=>E.distance(p,b)>=w.min&&E.distance(p,b)<=w.max));
+ $('losAdvice').textContent=a&&b&&!g.done?(clear.length?'Reachable positions with clear line of sight: '+clear.map(p=>E.coord(p.x,p.y)).join(', ')+'. '+(firing.length?'Within at least one weapon range: '+firing.map(p=>E.coord(p.x,p.y)).join(', ')+'.':'None within weapon range.'):'No reachable position has clear line of sight to '+b.name+'.'):'';
  const old=$('destination').value;
- options($('destination'),dest.map(p=>[E.key(p.x,p.y),E.coord(p.x,p.y)+', '+relative(a,p)+', cost '+p.cost+', '+(E.cover(p)?'cover':'open')+(b&&E.sight(p,b)?', clear shot at '+b.name:'')]),old);
+ options($('destination'),dest.map(p=>[E.key(p.x,p.y),E.coord(p.x,p.y)+', '+relative(a,p)+', cost '+p.cost+', '+(E.cover(p)?'cover':'open')+(b?', '+losText({...a,...p},b):'')]),old);
  $('move').disabled=!dest.length;
  for(const btn of $('directions').querySelectorAll('button')){
   const [dx,dy]=btn.dataset.dir.split(',').map(Number);
@@ -50,11 +57,24 @@ function render(){
  $('end').disabled=g.done;$('unit').disabled=!friends.length||g.done;$('target').disabled=!enemies.length||g.done;
  $('destination').disabled=!dest.length;
  const board=$('board');board.replaceChildren();
- for(let y=0;y<10;y++)for(let x=0;x<10;x++){
+ const blockers=a&&b?E.sightBlockers(a,b,g):[];
+ function axis(label){
+  const cell=document.createElement('span');cell.className='axis';cell.textContent=label;board.append(cell);
+ } // axis
+ axis('');for(let x=0;x<10;x++)axis(String(x+1)); 
+ for(let y=0;y<10;y++){
+ axis(String.fromCharCode(65+y));
+ for(let x=0;x<10;x++){
   const cell=document.createElement('span'),u=g.units.find(u=>E.alive(u)&&u.x===x&&u.y===y);
   cell.className=u?u.team+(u.id===unitId?' selected':''):E.walls.has(E.key(x,y))?'wall':'empty';
-  cell.textContent=u?u.name[0]:E.walls.has(E.key(x,y))?'#':E.coord(x,y);board.append(cell);
+  if(u&&u.id===targetId)cell.classList.add('targeted');
+  if(blockers.some(p=>p.x===x&&p.y===y))cell.classList.add('los-blocker');
+  const type=E.terrain.get(E.key(x,y));
+  if(type)cell.classList.add(type==='rock'?'rock':type==='scrap barricade'?'scrap':'barrier');
+  cell.title=E.coord(x,y)+': '+(u?u.name:type||'open ground');
+  cell.textContent=u?u.name[0]:type? (type==='rock'?'R':type==='scrap barricade'?'S':'B'):E.coord(x,y);board.append(cell);
  } // board cells
+ } // board rows
 } // render
 function finish(){
  const end=E.outcome(g);if(end&&!g.done){g.done=true;report(end,end.startsWith('Victory')?'victory':'defeat');} // end
@@ -79,7 +99,7 @@ $('scan').onclick=()=>{
 }; // scan
 $('terrain').onclick=()=>{
  const a=active();if(!a)return;
- const msg='Obstacles near '+a.name+': '+[...E.walls].map(k=>{const [x,y]=k.split(',').map(Number);return {x,y};}).filter(p=>E.distance(a,p)<=4).map(p=>E.coord(p.x,p.y)+', '+relative(a,p)).join('; ')+'. '+E.reachable(g,a).length+' reachable destinations.';
+ const msg='Obstacles near '+a.name+': '+[...E.walls].map(k=>{const [x,y]=k.split(',').map(Number);return {x,y};}).filter(p=>E.distance(a,p)<=4).map(p=>E.terrain.get(E.key(p.x,p.y))+' at '+E.coord(p.x,p.y)+', '+relative(a,p)).join('; ')+'. '+E.reachable(g,a).length+' reachable destinations.';
  $('scanResult').textContent=msg;report(msg);
 }; // terrain
 $('end').onclick=()=>{
