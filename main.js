@@ -4,6 +4,90 @@ const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
 const active=()=>g.units.find(u=>u.id===unitId);
 const target=()=>g.units.find(u=>u.id===targetId);
+const squareAt=(x,y)=>$('board').querySelector('[data-square="'+E.key(x,y)+'"]');
+let menuOrigin=null;
+function returnSquare(x=cursor.x,y=cursor.y){
+ cursor={x,y};refreshCursor(false);squareAt(x,y)?.focus({preventScroll:true});
+} // returnSquare
+function closeActions(restore=true){
+ const origin=menuOrigin;menuOrigin=null;
+ if($('squareMenu').open)$('squareMenu').close();
+ if(restore&&origin)returnSquare(origin.x,origin.y);
+} // closeActions
+function intelligence(u){
+ const enemies=g.units.filter(v=>E.alive(v)&&v.team!==u.team);
+ const visible=enemies.filter(v=>E.sight(u,v,g)).length;
+ return u.name+', '+u.team+', armor '+u.hp+' of '+u.max+', movement '+u.mp+', actions '+u.ap+'. '+visible+' opposing mechs in sight. '+g.units.filter(v=>E.alive(v)&&v.id!==u.id).map(v=>v.team+' '+v.name+' at '+E.coord(v.x,v.y)+', armor '+v.hp+' of '+v.max+', movement '+v.mp+', actions '+v.ap+', '+(E.sight(u,v,g)?'in sight':'line of sight blocked')).join('; ')+'.';
+} // intelligence
+function attackReason(a,b,w){
+ if(!a||!b||g.done||!E.alive(a)||!E.alive(b))return 'Combatant unavailable';
+ const reasons=[],d=E.distance(a,b);
+ if(a.ap<1)reasons.push('No action points remaining');
+ if(d<w.min)reasons.push('Too close: range '+d+', minimum '+w.min);
+ if(d>w.max)reasons.push('Out of range: range '+d+', maximum '+w.max);
+ if(!E.sight(a,b,g))reasons.push(losText(a,b));
+ return reasons.join('. ');
+} // attackReason
+function fireAt(a,b,w){
+ delay=0;A.init();const result=E.fire(a,b,w,g);
+ if(!result)return;
+ report(result,w.kind);finish();render();
+ $('fireResult').textContent=result+(g.done?' '+E.outcome(g):'');
+} // fireAt
+function openActions(x,y){
+ if(g.done)return;
+ const u=g.units.find(v=>E.alive(v)&&v.x===x&&v.y===y),a=active();
+ menuOrigin={x,y};
+ const dialog=$('squareMenu'),list=$('squareActions');
+ $('squareMenuTitle').textContent=E.coord(x,y)+' actions'+(u?' for '+u.name:'');
+ list.replaceChildren();
+ function add(label,reason,run,keep=false){
+  const button=document.createElement('button');button.type='button';
+  button.textContent=label+(reason?'. Unavailable. '+reason:'. Available');
+  if(reason)button.setAttribute('aria-disabled','true');
+  button.onclick=()=>{
+   if(reason){$('menuFeedback').textContent=reason;return;} // unavailable
+   if(!keep)closeActions(false);
+   run();
+   if(!keep)returnSquare(x,y);
+  }; // action
+  list.append(button);
+ } // add
+ if(u&&u.team==='enemy'){
+  targetId=u.id;render();
+  for(const w of E.weapons){
+   const damage=E.cover(u)?Math.floor(w.damage*.65):w.damage;
+   add('Fire '+w.name+'. '+damage+' damage, 1 action point, '+(a?a.ap:0)+' remaining, '+(E.cover(u)?70:90)+' percent accuracy',attackReason(a,u,w),()=>fireAt(a,u,w));
+  } // weapons
+  add('Inspect target','',()=>{$('menuFeedback').textContent=intelligence(u)+' '+(a?describe(a,u):'');},true);
+ }else if(u){
+  add('Command '+u.name,'',()=>{unitId=u.id;render();report('Commanding '+u.name);});
+  add('Inspect unit and detected mechs','',()=>{$('menuFeedback').textContent=intelligence(u);},true);
+ } // entity actions
+ add('End friendly round','',()=>{$('end').click();});
+ const cancel=document.createElement('button');cancel.type='button';cancel.textContent='Cancel and return to '+E.coord(x,y);cancel.onclick=()=>closeActions();list.append(cancel);
+ $('menuFeedback').textContent='';
+ dialog.showModal();
+ const rect=squareAt(x,y).getBoundingClientRect();
+ const bounds=dialog.getBoundingClientRect();
+ dialog.style.left=Math.max(4,Math.min(rect.left,window.innerWidth-bounds.width-4))+'px';
+ dialog.style.top=Math.max(4,Math.min(rect.top,window.innerHeight-bounds.height-4))+'px';
+ list.querySelector('button')?.focus({preventScroll:true});
+} // openActions
+function activateSquare(x,y){
+ if(g.done)return;
+ cursor={x,y};refreshCursor(false);
+ const u=cursorUnit(),a=active(),type=E.terrain.get(E.key(x,y));
+ if(u){
+  if(u.team==='friendly'&&u.id!==unitId){unitId=u.id;render();report('Commanding '+u.name);returnSquare(x,y);}
+  else openActions(x,y);
+  return;
+ } // unit activation
+ if(type){report(E.coord(x,y)+'. '+type+'. Blocks movement and line of sight.');return;}
+ if(a&&E.reachable(g,a).some(p=>p.x===x&&p.y===y)){moveTo(x,y);returnSquare(x,y);return;}
+ const route=a?E.reachable(g,{...a,mp:100}).find(p=>p.x===x&&p.y===y):null;
+ report(E.coord(x,y)+'. Cannot move. '+(route?'Requires '+route.cost+' movement points; '+a.mp+' remaining.':'No legal path.'));
+} // activateSquare
 function report(msg,sound=''){
  if(!msg)return;
  const li=document.createElement('li');li.textContent=msg;$('log').prepend(li);
@@ -113,15 +197,12 @@ function render(){
   cell.dataset.square=E.key(x,y);
   cell.type='button';
   const p=dest.find(p=>p.x===x&&p.y===y);
-  const description=E.coord(x,y)+', '+(u?(u.team==='friendly'?'friendly ':'enemy ')+u.name+(u.id===unitId?', active':u.id===targetId?', targeted':''):type||'open');
+  const mode=$('verbosity').value;
+  const short=E.coord(x,y)+', '+(u?(u.team==='friendly'?'friendly ':'enemy ')+u.name+(u.id===unitId?', active':u.id===targetId?', targeted':''):type||'open');
+  const description=mode==='brief'?short:u?short+'. Armor '+u.hp+' of '+u.max+'. Movement '+u.mp+'. Actions '+u.ap+'. '+(a&&u.team==='enemy'?describe(a,u):'')+(mode==='full'?'. '+intelligence(u):''):short+(p?', reachable, cost '+p.cost:!type?', not reachable':'');
   cell.setAttribute('aria-label',description);
   cell.onfocus=()=>{cursor={x,y};refreshCursor(false);}; // keyboard focus
-  cell.onclick=()=>{
-   cursor={x,y};refreshCursor(false);
-   if(u&&!g.done){selectCursor(false);}
-   else if(p&&!g.done){$('destination').value=E.key(x,y);report('Destination '+E.coord(x,y)+' selected. Activate Move mech to cursor to confirm.');}
-   else $('cursorSpeech').textContent=$('cursorInfo').textContent;
-  }; // contextual activation
+  cell.onclick=()=>activateSquare(x,y); // contextual activation
   cell.onkeydown=event=>{
    const d={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}[event.key];
    if(d){event.preventDefault();const next=board.querySelector('[data-square="'+E.key(x+d[0],y+d[1])+'"]');if(next)next.focus();}
@@ -139,7 +220,7 @@ function moveTo(x,y){
  delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
 } // moveTo
 function start(){
- g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
+ g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;document.body.classList.add('in-mission');render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
 } // start
 $('start').onclick=()=>{A.init();start();}; // start button
 $('restart').onclick=start;
@@ -170,13 +251,23 @@ $('cursorPad').addEventListener('keydown',event=>{
  const dirs={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}; // directions
  const d=dirs[event.key];
  if(d){event.preventDefault();setCursor(cursor.x+d[0],cursor.y+d[1]);}
- else if(event.key==='Enter'){event.preventDefault();selectCursor();}
+ else if(event.key==='Enter'){event.preventDefault();activateSquare(cursor.x,cursor.y);}
  else if(event.key==='Home'){event.preventDefault();const a=active();if(a)setCursor(a.x,a.y);} // return to active
 }); // keyboard navigation
 for(const btn of $('cursorDirections').querySelectorAll('button')){
  btn.onclick=()=>{const [dx,dy]=btn.dataset.cursorDir.split(',').map(Number);setCursor(cursor.x+dx,cursor.y+dy);}; // mobile navigation
 } // directional buttons
-$('cursorHome').onclick=()=>{const a=active();if(a)setCursor(a.x,a.y);}; // jump home
+$('cursorHome').onclick=()=>{const a=active();if(a)returnSquare(a.x,a.y);}; // jump home
 $('cursorTarget').onclick=()=>{const b=target();if(b)setCursor(b.x,b.y);}; // jump target
 $('cursorSelect').onclick=()=>selectCursor();
 $('cursorMove').onclick=()=>{moveTo(cursor.x,cursor.y);$('cursorPad').focus();}; // explicit move
+
+$('verbosity').onchange=()=>{if(g)render();}; // tile detail level
+$('returnSquare').onclick=()=>returnSquare();
+$('squareMenu').addEventListener('cancel',event=>{event.preventDefault();closeActions();}); // Escape
+$('squareMenu').addEventListener('keydown',event=>{
+ if(!['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(event.key))return;
+ const items=[...$('squareActions').querySelectorAll('button')];
+ const i=items.indexOf(document.activeElement);
+ event.preventDefault();items[(i+(event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1)+items.length)%items.length]?.focus();
+}); // menu keyboard
