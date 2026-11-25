@@ -10,7 +10,7 @@ assert.equal(a.mp,3);
 assert.equal(E.sight({x:2,y:3},{x:4,y:3}),false);
 const attacker={team:'friendly',x:0,y:0,hp:100,ap:2,name:'A'};
 const defender={team:'enemy',x:1,y:0,hp:50,name:'B'};
-assert.ok(E.fire(attacker,defender,E.weapons[0]));
+assert.ok(E.fire(attacker,defender,E.weapons[0],undefined,()=>0));
 assert.equal(defender.hp,28);
 assert.equal(attacker.ap,1);
 E.enemyRound(g,()=>{});
@@ -27,4 +27,8 @@ assert.equal(E.sightBlockers(shooter,victim,testGame)[0].type,'friendly mech Vip
 assert.equal(E.canFire(shooter,victim,E.weapons[0],testGame),false);
 ally.hp=0;
 assert.equal(E.canFire(shooter,victim,E.weapons[0],testGame),true);
+const miss=E.fire(attacker,defender,E.weapons[0],undefined,()=>0.99);
+assert.match(miss,/Miss\. Zero damage/);
+assert.equal(defender.hp,28);
+assert.equal(attacker.ap,0);
 console.log('Engine smoke tests passed.');
