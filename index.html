@@ -1,15 +1,15 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tactical Mech Sandbox</title><link rel="stylesheet" href="style.css?v=2"></head>
-<body><header><h1>Tactical Mech Sandbox</h1><p>Prototype 0.2 · Audio-first tactical combat</p></header>
-<main><section id="setup"><h2>Mission: Scrap Yard</h2><p>Destroy three hostile mechs. Each friendly mech can move up to four squares and fire twice per round. Enemy turns resolve when you end the round. Obstacles block movement and firing lines; adjacent obstacles provide cover.</p><button id="start">Start mission</button></section>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tactical Mech Sandbox</title><link rel="stylesheet" href="style.css?v=3"></head>
+<body><header><h1>Tactical Mech Sandbox</h1><p>Prototype 0.3 · Audio-first tactical combat</p></header>
+<main><section id="setup"><h2>Mission: Scrap Yard</h2><p>Destroy three hostile mechs. Each friendly mech can move up to four squares and fire twice per round. Enemy turns resolve when you end the round. Obstacles and other mechs block movement and firing lines; adjacent obstacles provide cover.</p><button id="start">Start mission</button></section>
 <section aria-label="Audio settings"><label><input type="checkbox" id="sound" checked> Sound effects</label> <label for="volume">Effects volume</label><input id="volume" type="range" min="0" max="100" value="35"></section>
 <div id="game" hidden>
 <h2 id="round">Round 1</h2><p id="announcement" role="status" aria-live="polite" aria-atomic="true"></p>
-<section id="battlefield"><h3>Battlefield</h3><div id="board" aria-hidden="true"></div><p class="legend">Blue circles: friendly mechs. Red diamonds: hostile mechs. Gray squares: obstacles. Yellow outline: active friendly mech.</p></section>
+<section id="battlefield"><h3>Battlefield</h3><div id="board" aria-hidden="true"></div><p class="legend">Blue circles: friendly mechs. Red diamonds: hostile mechs. B: concrete barrier. R: rock. S: scrap barricade. Yellow outline: active friendly mech. Teal outline: selected target. Orange outline: line-of-sight blocker. Rows A to J, columns 1 to 10.</p></section>
 <section><h3>Command unit</h3><label for="unit">Friendly mech</label><select id="unit"></select><p id="stats"></p></section>
-<section><h3>Weapons</h3><label for="target">Hostile target</label><select id="target"></select><p id="targetInfo"></p><div id="weapons"></div></section>
+<section><h3>Weapons</h3><label for="target">Hostile target</label><select id="target"></select><p id="targetInfo"></p><p id="losAdvice"></p><div id="weapons"></div></section>
 <section><h3>Movement</h3><div id="directions"><button data-dir="0,-1">North</button><button data-dir="1,0">East</button><button data-dir="0,1">South</button><button data-dir="-1,0">West</button></div><label for="destination">Reachable destination</label><select id="destination"></select><button id="move">Move to destination</button></section>
 <section><h3>Battlefield intelligence</h3><button id="scan">Scan battlefield</button><button id="terrain">Scan nearby terrain</button><p id="scanResult"></p></section>
 <button id="end">End friendly round</button><button id="restart">Restart mission</button>
 <section><h3>Combat log</h3><ol id="log"></ol></section></div></main>
-<script type="module" src="main.js"></script></body></html>
+<script type="module" src="main.js?v=3"></script></body></html>
