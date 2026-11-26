@@ -264,6 +264,7 @@ $('cursorPad').addEventListener('keydown',event=>{
  if(event.key==='Escape'||event.key==='Tab'){leaveKeyboardMode(event.key==='Tab'&&event.shiftKey);event.preventDefault();return;} // explicit exit
  if(d){event.preventDefault();setCursor(cursor.x+d[0],cursor.y+d[1]);}
  else if(event.key==='Enter'){event.preventDefault();activateSquare(cursor.x,cursor.y);}
+ else if(event.key==='F1'){event.preventDefault();$('cursorSpeech').textContent=$('keyboardHelp').textContent;}
  else if(event.key.toLowerCase()==='r'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();announceAction(lastAction||'No action result yet.');}
  else if(event.key==='Home'){event.preventDefault();const a=active();if(a)setCursor(a.x,a.y);} // return to active
 }); // keyboard navigation
@@ -301,7 +302,7 @@ function enterKeyboardMode(){
  if($('squareMenu').open)closeActions(false);
  keyboardLocked=true;$('cursorPad').classList.add('locked');
  $('cursorPad').focus({preventScroll:true});
- $('cursorSpeech').textContent='Battlefield keyboard mode. '+(squareAt(cursor.x,cursor.y)?.getAttribute('aria-label')||'')+'. Arrow keys explore, Enter activates, Escape exits.';
+ $('cursorSpeech').textContent=squareAt(cursor.x,cursor.y)?.getAttribute('aria-label')||E.coord(cursor.x,cursor.y);
 } // enterKeyboardMode
 function leaveKeyboardMode(backward=false){
  keyboardLocked=false;$('cursorPad').classList.remove('locked');
@@ -322,3 +323,5 @@ document.addEventListener('keydown',event=>{
 },true); // global keyboard shortcut
 
 $('repeatAction').onclick=()=>announceAction(lastAction||'No action result yet.'); // repeat result
+
+$('showKeyboardHelp').onclick=()=>{$('cursorSpeech').textContent=$('keyboardHelp').textContent;}; // on-demand instructions
