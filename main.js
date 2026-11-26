@@ -258,12 +258,26 @@ $('end').onclick=()=>{
  batching=false;announceAction($('announcement').textContent);
 }; // enemy round
 
+function cycleCombatant(team,backward=false){
+ const units=g.units.filter(u=>u.team===team&&E.alive(u));
+ if(!units.length){$('cursorSpeech').textContent='No surviving '+(team==='friendly'?'friendly mechs.':'enemy targets.');return;} // empty list
+ const id=team==='friendly'?unitId:targetId;
+ const i=units.findIndex(u=>u.id===id);
+ const next=units[i<0?(backward?units.length-1:0):(i+(backward?-1:1)+units.length)%units.length];
+ if(team==='friendly')unitId=next.id;else targetId=next.id;
+ cursor={x:next.x,y:next.y};render();A.play('select');
+ const a=active(),details=squareAt(next.x,next.y)?.getAttribute('aria-label')||next.name;
+ const availability=team==='enemy'&&a&&!g.done?E.weapons.filter(w=>E.canFire(a,next,w,g)).map(w=>w.name):[];
+ const suffix=team==='enemy'?(availability.length?' Available weapons: '+availability.join(', ')+'.':' No weapons currently available. '+(a?losText(a,next):'')):'';
+ $('cursorSpeech').textContent=(team==='friendly'?'Commanding ':'Targeting ')+details+'. '+suffix;
+} // cycleCombatant
 $('cursorPad').addEventListener('keydown',event=>{
  const dirs={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}; // directions
  const d=dirs[event.key];
  if(event.key==='Escape'||event.key==='Tab'){leaveKeyboardMode(event.key==='Tab'&&event.shiftKey);event.preventDefault();return;} // explicit exit
  if(d){event.preventDefault();setCursor(cursor.x+d[0],cursor.y+d[1]);}
  else if(event.key==='Enter'){event.preventDefault();activateSquare(cursor.x,cursor.y);}
+ else if(!event.altKey&&!event.ctrlKey&&!event.metaKey&&['f','e'].includes(event.key.toLowerCase())){event.preventDefault();cycleCombatant(event.key.toLowerCase()==='f'?'friendly':'enemy',event.shiftKey);}
  else if(event.key==='F1'){event.preventDefault();$('cursorSpeech').textContent=$('keyboardHelp').textContent;}
  else if(event.key.toLowerCase()==='r'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();announceAction(lastAction||'No action result yet.');}
  else if(event.key==='Home'){event.preventDefault();const a=active();if(a)setCursor(a.x,a.y);} // return to active
