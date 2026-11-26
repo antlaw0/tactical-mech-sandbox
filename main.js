@@ -5,9 +5,9 @@ let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
 const active=()=>g.units.find(u=>u.id===unitId);
 const target=()=>g.units.find(u=>u.id===targetId);
 const squareAt=(x,y)=>$('board').querySelector('[data-square="'+E.key(x,y)+'"]');
-let menuOrigin=null;
+let menuOrigin=null,keyboardLocked=false; // keyboard exploration mode
 function returnSquare(x=cursor.x,y=cursor.y){
- cursor={x,y};refreshCursor(false);squareAt(x,y)?.focus({preventScroll:true});
+ cursor={x,y};refreshCursor(keyboardLocked);if(keyboardLocked)$('cursorPad').focus({preventScroll:true});else squareAt(x,y)?.focus({preventScroll:true});
 } // returnSquare
 function closeActions(restore=true){
  const origin=menuOrigin;menuOrigin=null;
@@ -131,7 +131,7 @@ function refreshCursor(announce=false){
  for(const cell of $('board').querySelectorAll('[data-square]')){
   cell.classList.toggle('cursor',cell.dataset.square===E.key(cursor.x,cursor.y));
  } // visual cursor
- if(announce)$('cursorSpeech').textContent=msg;
+ if(announce)$('cursorSpeech').textContent=keyboardLocked?(squareAt(cursor.x,cursor.y)?.getAttribute('aria-label')||msg):msg;
 } // refreshCursor
 function setCursor(x,y){
  if(x<0||x>9||y<0||y>9){$('cursorSpeech').textContent='Battlefield edge. '+E.coord(cursor.x,cursor.y);return;} // boundary
@@ -220,6 +220,7 @@ function moveTo(x,y){
  delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
 } // moveTo
 function start(){
+ keyboardLocked=false;$('cursorPad').classList.remove('locked');
  g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;document.body.classList.add('in-mission');$('missionControls').append($('audioSettings'));render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
 } // start
 $('start').onclick=()=>{A.init();start();}; // start button
@@ -243,13 +244,14 @@ $('end').onclick=()=>{
  if(g.done)return;delay=0;const entries=[];
  E.enemyRound(g,(msg,sound)=>{entries.push(msg);report(msg,sound);});
  finish();render();
- if(!g.done){report('Round '+g.round+'. Friendly turn.','turn');$('announcement').textContent=entries.join(' ')+' Round '+g.round+'. Friendly turn.';$('unit').focus();}
- else {$('announcement').textContent=entries.join(' ')+' '+E.outcome(g);$('restart').focus();} // round end focus
+ if(!g.done){report('Round '+g.round+'. Friendly turn.','turn');$('announcement').textContent=entries.join(' ')+' Round '+g.round+'. Friendly turn.';if(keyboardLocked)returnSquare();else $('unit').focus();}
+ else {$('announcement').textContent=entries.join(' ')+' '+E.outcome(g);if(keyboardLocked)leaveKeyboardMode();$('restart').focus();} // round end focus
 }; // enemy round
 
 $('cursorPad').addEventListener('keydown',event=>{
  const dirs={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]}; // directions
  const d=dirs[event.key];
+ if(event.key==='Escape'||event.key==='Tab'){leaveKeyboardMode(event.key==='Tab'&&event.shiftKey);event.preventDefault();return;} // explicit exit
  if(d){event.preventDefault();setCursor(cursor.x+d[0],cursor.y+d[1]);}
  else if(event.key==='Enter'){event.preventDefault();activateSquare(cursor.x,cursor.y);}
  else if(event.key==='Home'){event.preventDefault();const a=active();if(a)setCursor(a.x,a.y);} // return to active
@@ -282,3 +284,28 @@ $('testSound').onclick=()=>{
  A.init().then(ok=>{audioStatus();if(ok)A.play('test');else $('audioStatus').textContent='Audio could not start. Try activating Test sound again.';});
 }; // test audio
 $('sound').addEventListener('change',audioStatus);
+
+function enterKeyboardMode(){
+ if(!g||$('game').hidden)return;
+ if($('squareMenu').open)closeActions(false);
+ keyboardLocked=true;$('cursorPad').classList.add('locked');
+ $('cursorPad').focus({preventScroll:true});
+ $('cursorSpeech').textContent='Battlefield keyboard mode. '+(squareAt(cursor.x,cursor.y)?.getAttribute('aria-label')||'')+'. Arrow keys explore, Enter activates, Escape exits.';
+} // enterKeyboardMode
+function leaveKeyboardMode(backward=false){
+ keyboardLocked=false;$('cursorPad').classList.remove('locked');
+ (backward?$('returnSquare'):$('keyboardMode')).focus({preventScroll:true});
+ $('cursorSpeech').textContent='Battlefield keyboard mode exited.';
+} // leaveKeyboardMode
+$('keyboardMode').onclick=enterKeyboardMode;
+$('cursorPad').addEventListener('focus',()=>{keyboardLocked=true;$('cursorPad').classList.add('locked');}); // keyboard mode entry
+$('cursorPad').addEventListener('blur',()=>{
+ // A contextual dialog temporarily takes focus. Preserve mode until it closes.
+ if(!$('squareMenu').open&&!menuOrigin){keyboardLocked=false;$('cursorPad').classList.remove('locked');} // ordinary focus departure
+}); // blur
+document.addEventListener('keydown',event=>{
+ if(!g||$('game').hidden)return;
+ if(event.altKey&&event.shiftKey&&!event.ctrlKey&&!event.metaKey&&event.code==='KeyG'){
+  event.preventDefault();enterKeyboardMode();
+ } // shortcut
+},true); // global keyboard shortcut
