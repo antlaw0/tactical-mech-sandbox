@@ -1,13 +1,13 @@
-import * as E from './engine.js?v=5';
-import * as A from './audio.js?v=8';
+import * as E from './engine.js?v=10';
+import * as A from './audio.js?v=10';
 const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
 const active=()=>g.units.find(u=>u.id===unitId);
 const target=()=>g.units.find(u=>u.id===targetId);
 const squareAt=(x,y)=>$('board').querySelector('[data-square="'+E.key(x,y)+'"]');
-let menuOrigin=null,keyboardLocked=false; // keyboard exploration mode
+let menuOrigin=null,keyboardLocked=false,actionTimer=0,lastAction='',batching=false; // keyboard exploration mode
 function returnSquare(x=cursor.x,y=cursor.y){
- cursor={x,y};refreshCursor(keyboardLocked);if(keyboardLocked)$('cursorPad').focus({preventScroll:true});else squareAt(x,y)?.focus({preventScroll:true});
+ cursor={x,y};refreshCursor(false);if(keyboardLocked)$('cursorPad').focus({preventScroll:true});else squareAt(x,y)?.focus({preventScroll:true});
 } // returnSquare
 function closeActions(restore=true){
  const origin=menuOrigin;menuOrigin=null;
@@ -31,8 +31,9 @@ function attackReason(a,b,w){
 function fireAt(a,b,w){
  delay=0;A.init();const result=E.fire(a,b,w,g);
  if(!result)return;
- report(result,w.kind);finish();render();
- $('fireResult').textContent=result+(g.done?' '+E.outcome(g):'');
+ batching=true;report(result,w.kind);finish();render();batching=false;
+ const feedback=result+(g.done?' '+E.outcome(g):'');
+ $('fireResult').textContent=feedback;announceAction(feedback);
 } // fireAt
 function openActions(x,y){
  if(g.done)return;
@@ -88,10 +89,20 @@ function activateSquare(x,y){
  const route=a?E.reachable(g,{...a,mp:100}).find(p=>p.x===x&&p.y===y):null;
  report(E.coord(x,y)+'. Cannot move. '+(route?'Requires '+route.cost+' movement points; '+a.mp+' remaining.':'No legal path.'));
 } // activateSquare
+function announceAction(msg){
+ if(!msg)return;
+ lastAction=msg;
+ clearTimeout(actionTimer);
+ $('actionSpeech').textContent='';
+ $('cursorSpeech').textContent='';
+ // Publish after synchronous rendering and focus restoration, including identical results.
+ actionTimer=setTimeout(()=>{$('actionSpeech').textContent=msg;},140);
+} // announceAction
 function report(msg,sound=''){
  if(!msg)return;
  const li=document.createElement('li');li.textContent=msg;$('log').prepend(li);
  $('announcement').textContent=msg;
+ if(!batching)announceAction(msg);
  if(sound){A.play(sound,delay);if(['gun','laser','missile'].includes(sound)){A.play(msg.includes('. Miss.')?'miss':'hit',delay+(sound==='missile'?.65:.35));delay+=.85;}else delay+=.35;} // sound sequence
 } // report
 function options(el,items,selected){
@@ -156,9 +167,7 @@ function render(){
   btn.dataset.weapon=w.kind;
   btn.disabled=g.done||!a||!b||!E.canFire(a,b,w,g);
   btn.onclick=()=>{
-   delay=0;A.init();const result=E.fire(a,b,w,g);
-   report(result,w.kind);finish();render();
-   $('fireResult').textContent=result+(g.done?' '+E.outcome(g):'');
+   fireAt(a,b,w);
    const next=[...$('weapons').querySelectorAll('button')].find(el=>el.dataset.weapon===w.kind&&!el.disabled);
    if(next)next.focus();else $('fireResult').focus();
   }; // fire handler
@@ -220,7 +229,7 @@ function moveTo(x,y){
  delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
 } // moveTo
 function start(){
- keyboardLocked=false;$('cursorPad').classList.remove('locked');
+ keyboardLocked=false;$('cursorPad').classList.remove('locked');clearTimeout(actionTimer);lastAction='';$('actionSpeech').textContent='';
  g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;document.body.classList.add('in-mission');$('missionControls').append($('audioSettings'));render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
 } // start
 $('start').onclick=()=>{A.init();start();}; // start button
@@ -241,11 +250,12 @@ $('terrain').onclick=()=>{
  $('scanResult').textContent=msg;report(msg);
 }; // terrain
 $('end').onclick=()=>{
- if(g.done)return;delay=0;const entries=[];
+ if(g.done)return;delay=0;const entries=[];batching=true;
  E.enemyRound(g,(msg,sound)=>{entries.push(msg);report(msg,sound);});
  finish();render();
  if(!g.done){report('Round '+g.round+'. Friendly turn.','turn');$('announcement').textContent=entries.join(' ')+' Round '+g.round+'. Friendly turn.';if(keyboardLocked)returnSquare();else $('unit').focus();}
  else {$('announcement').textContent=entries.join(' ')+' '+E.outcome(g);if(keyboardLocked)leaveKeyboardMode();$('restart').focus();} // round end focus
+ batching=false;announceAction($('announcement').textContent);
 }; // enemy round
 
 $('cursorPad').addEventListener('keydown',event=>{
@@ -254,6 +264,7 @@ $('cursorPad').addEventListener('keydown',event=>{
  if(event.key==='Escape'||event.key==='Tab'){leaveKeyboardMode(event.key==='Tab'&&event.shiftKey);event.preventDefault();return;} // explicit exit
  if(d){event.preventDefault();setCursor(cursor.x+d[0],cursor.y+d[1]);}
  else if(event.key==='Enter'){event.preventDefault();activateSquare(cursor.x,cursor.y);}
+ else if(event.key.toLowerCase()==='r'&&!event.altKey&&!event.ctrlKey&&!event.metaKey){event.preventDefault();announceAction(lastAction||'No action result yet.');}
  else if(event.key==='Home'){event.preventDefault();const a=active();if(a)setCursor(a.x,a.y);} // return to active
 }); // keyboard navigation
 for(const btn of $('cursorDirections').querySelectorAll('button')){
@@ -275,7 +286,7 @@ $('squareMenu').addEventListener('keydown',event=>{
 }); // menu keyboard
 
 function audioStatus(){
- $('audioStatus').textContent=A.status();
+ const status=A.status();if($('audioStatus').textContent!==status)$('audioStatus').textContent=status;
 } // audioStatus
 window.addEventListener('gameaudiochange',audioStatus);
 document.addEventListener('click',()=>{if($('sound').checked)A.init().then(audioStatus);},true); // trusted activation, including VoiceOver clicks
@@ -309,3 +320,5 @@ document.addEventListener('keydown',event=>{
   event.preventDefault();enterKeyboardMode();
  } // shortcut
 },true); // global keyboard shortcut
+
+$('repeatAction').onclick=()=>announceAction(lastAction||'No action result yet.'); // repeat result
