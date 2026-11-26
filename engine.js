@@ -69,10 +69,10 @@ export function fire(a,b,w,g,random=Math.random){
  if(!canFire(a,b,w,g))return null;
  a.ap--;
  const chance=cover(b)?0.70:0.90;
- if(random()>=chance)return a.name+' fires '+w.name+' at '+b.name+'. Miss. Zero damage.';
+ if(random()>=chance)return a.name+' fires '+w.name+' at '+b.name+'. Miss. Zero damage. '+b.name+' has '+b.hp+' armor remaining. '+a.name+' has '+a.ap+' action points remaining.';
  const damage=Math.min(b.hp,cover(b)?Math.floor(w.damage*0.65):w.damage);
  b.hp=Math.max(0,b.hp-damage);
- return a.name+' fires '+w.name+' at '+b.name+'. Hit. '+damage+' damage. '+(alive(b)?b.hp+' armor remaining.':'Target destroyed.');
+ return a.name+' fires '+w.name+' at '+b.name+'. Hit. '+damage+' damage. '+(alive(b)?b.name+' has '+b.hp+' armor remaining.':'Target destroyed.')+' '+a.name+' has '+a.ap+' action points remaining.';
 } // fire
 export function move(g,u,x,y){
  const p=reachable(g,u).find(p=>p.x===x&&p.y===y);
