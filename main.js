@@ -1,5 +1,5 @@
 import * as E from './engine.js?v=5';
-import * as A from './audio.js?v=5';
+import * as A from './audio.js?v=8';
 const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
 const active=()=>g.units.find(u=>u.id===unitId);
@@ -220,7 +220,7 @@ function moveTo(x,y){
  delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
 } // moveTo
 function start(){
- g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;document.body.classList.add('in-mission');render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
+ g=E.newGame();cursor={x:1,y:7};unitId='atlas';targetId='reaper';delay=0;$('log').replaceChildren();$('fireResult').textContent='';$('scanResult').textContent='';$('setup').hidden=true;$('game').hidden=false;document.body.classList.add('in-mission');$('missionControls').append($('audioSettings'));render();report('Mission started. Round 1. Explore the battlefield.','turn');$('board').querySelector('[data-square="1,7"]').focus();
 } // start
 $('start').onclick=()=>{A.init();start();}; // start button
 $('restart').onclick=start;
@@ -271,3 +271,14 @@ $('squareMenu').addEventListener('keydown',event=>{
  const i=items.indexOf(document.activeElement);
  event.preventDefault();items[(i+(event.key==='ArrowLeft'||event.key==='ArrowUp'?-1:1)+items.length)%items.length]?.focus();
 }); // menu keyboard
+
+function audioStatus(){
+ $('audioStatus').textContent=A.status();
+} // audioStatus
+window.addEventListener('gameaudiochange',audioStatus);
+document.addEventListener('click',()=>{if($('sound').checked)A.init().then(audioStatus);},true); // trusted activation, including VoiceOver clicks
+$('testSound').onclick=()=>{
+ $('sound').checked=true;A.settings(true,Number($('volume').value)/100);
+ A.init().then(ok=>{audioStatus();if(ok)A.play('test');else $('audioStatus').textContent='Audio could not start. Try activating Test sound again.';});
+}; // test audio
+$('sound').addEventListener('change',audioStatus);
