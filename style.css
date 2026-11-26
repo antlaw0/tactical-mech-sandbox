@@ -67,3 +67,5 @@ body.in-mission #missionControls .legend{display:none}
 #squareActions button[aria-disabled=true]{background:#333;color:#e4e4e4}
 #menuFeedback:empty{display:none}
 @media(orientation:portrait) and (max-width:600px){body.in-mission #board{width:min(100vw,65dvh);gap:1px;padding:1px}}
+
+body.in-mission #audioSettings{display:block}
