@@ -1,4 +1,4 @@
-import * as E from './engine.js?v=10';
+import * as E from './engine.js?v=13';
 import * as A from './audio.js?v=10';
 const $=id=>document.getElementById(id);
 let g,unitId,targetId,delay=0,cursor={x:1,y:7}; // cursor state
@@ -20,19 +20,13 @@ function intelligence(u){
  return u.name+', '+u.team+', armor '+u.hp+' of '+u.max+', movement '+u.mp+', actions '+u.ap+'. '+visible+' opposing mechs in sight. '+g.units.filter(v=>E.alive(v)&&v.id!==u.id).map(v=>v.team+' '+v.name+' at '+E.coord(v.x,v.y)+', armor '+v.hp+' of '+v.max+', movement '+v.mp+', actions '+v.ap+', '+(E.sight(u,v,g)?'in sight':'line of sight blocked')).join('; ')+'.';
 } // intelligence
 function attackReason(a,b,w){
- if(!a||!b||g.done||!E.alive(a)||!E.alive(b))return 'Combatant unavailable';
- const reasons=[],d=E.distance(a,b);
- if(a.ap<1)reasons.push('No action points remaining');
- if(d<w.min)reasons.push('Too close: range '+d+', minimum '+w.min);
- if(d>w.max)reasons.push('Out of range: range '+d+', maximum '+w.max);
- if(!E.sight(a,b,g))reasons.push(losText(a,b));
- return reasons.join('. ');
+ return E.attackPreview(a,b,w,g).reasons.join('. ');
 } // attackReason
 function fireAt(a,b,w){
- delay=0;A.init();const result=E.fire(a,b,w,g);
- if(!result)return;
- batching=true;report(result,w.kind);finish();render();batching=false;
- const feedback=result+(g.done?' '+E.outcome(g):'');
+ delay=0;A.init();const result=E.resolveAction(g,a,{type:'attack',target:b,weapon:w});
+ if(!result.ok){report(result.reasons.join('. '));return;} // rejected
+ batching=true;report(result.message,result.sound);finish();render();batching=false;
+ const feedback=result.message+(g.done?' '+E.outcome(g):'');
  $('fireResult').textContent=feedback;announceAction(feedback);
 } // fireAt
 function openActions(x,y){
@@ -56,9 +50,9 @@ function openActions(x,y){
  } // add
  if(u&&u.team==='enemy'){
   targetId=u.id;render();
-  for(const w of E.weapons){
-   const damage=E.cover(u)?Math.floor(w.damage*.65):w.damage;
-   add('Fire '+w.name+'. '+damage+' damage, 1 action point, '+(a?a.ap:0)+' remaining, '+(E.cover(u)?70:90)+' percent accuracy',attackReason(a,u,w),()=>fireAt(a,u,w));
+  for(const w of E.weaponsFor(a)){
+   const p=E.attackPreview(a,u,w,g);
+   add('Fire '+w.name+'. '+p.damage+' damage, '+p.cost+' action point cost, '+(a?a.ap:0)+' remaining, '+Math.round(p.chance*100)+' percent accuracy, '+w.type,attackReason(a,u,w),()=>fireAt(a,u,w));
   } // weapons
   add('Inspect target','',()=>{$('menuFeedback').textContent=intelligence(u)+' '+(a?describe(a,u):'');},true);
  }else if(u){
@@ -121,7 +115,7 @@ function losText(a,b){
  return blockers.length?'Line of sight blocked by '+blockers.map(p=>p.type+' at '+E.coord(p.x,p.y)).join('; '):'Clear line of sight';
 } // losText
 function describe(a,b){
- return b.name+', '+E.coord(b.x,b.y)+', '+relative(a,b)+', range '+E.distance(a,b)+', '+b.hp+' of '+b.max+' armor, '+losText(a,b)+', '+(E.cover(b)?'cover':'open');
+ return b.name+', '+E.coord(b.x,b.y)+', '+relative(a,b)+', range '+E.distance(a,b)+', '+b.hp+' of '+b.max+' armor, '+losText(a,b)+', '+(E.cover(b,a)?'directional cover':'open to attacker');
 } // describe
 function cursorUnit(){
  return g.units.find(u=>E.alive(u)&&u.x===cursor.x&&u.y===cursor.y);
@@ -163,7 +157,7 @@ function render(){
  $('targetInfo').textContent=a&&b?describe(a,b):'No target available.';
  const buttons=$('weapons');buttons.replaceChildren();
  for(const w of E.weapons){
-  const btn=document.createElement('button');btn.textContent=w.name+' (range '+w.min+' to '+w.max+', damage '+w.damage+')';
+  const btn=document.createElement('button');const preview=E.attackPreview(a,b,w,g);btn.textContent=w.name+' (range '+w.min+' to '+w.max+', damage '+(b?preview.damage:w.damage)+', '+preview.cost+' AP'+(b?', '+Math.round(preview.chance*100)+' percent accuracy':'')+')'+(preview.available?'':', unavailable: '+preview.reasons.join('. '));
   btn.dataset.weapon=w.kind;
   btn.disabled=g.done||!a||!b||!E.canFire(a,b,w,g);
   btn.onclick=()=>{
@@ -175,7 +169,7 @@ function render(){
  } // weapons
  const dest=a&&!g.done?E.reachable(g,a):[];
  const clear= a&&b?dest.filter(p=>E.sight({...a,...p},b,g)):[];
- const firing=clear.filter(p=>E.weapons.some(w=>E.distance(p,b)>=w.min&&E.distance(p,b)<=w.max));
+ const firing=clear.filter(p=>E.weaponsFor(a).some(w=>E.canFire({...a,...p},b,w,g)));
  $('losAdvice').textContent=a&&b&&!g.done?(clear.length?'Reachable positions with clear line of sight: '+clear.map(p=>E.coord(p.x,p.y)).join(', ')+'. '+(firing.length?'Within at least one weapon range: '+firing.map(p=>E.coord(p.x,p.y)).join(', ')+'.':'None within weapon range.'):'No reachable position has clear line of sight to '+b.name+'.'):'';
  const old=$('destination').value;
  options($('destination'),dest.map(p=>[E.key(p.x,p.y),E.coord(p.x,p.y)+', '+relative(a,p)+', cost '+p.cost+', '+(E.cover(p)?'cover':'open')+(b?', '+losText({...a,...p},b):'')]),old);
@@ -226,7 +220,7 @@ function finish(){
  const end=E.outcome(g);if(end&&!g.done){g.done=true;report(end,end.startsWith('Victory')?'victory':'defeat');} // end
 } // finish
 function moveTo(x,y){
- delay=0;const a=active();if(!g.done&&a&&E.move(g,a,x,y)){report(a.name+' moves to '+E.coord(x,y)+'. Movement remaining '+a.mp+'.','move');render();if(document.activeElement.disabled)$('unit').focus();} // movement
+ delay=0;const a=active();if(!g.done&&a){const result=E.resolveAction(g,a,{type:'move',x,y});if(result.ok){report(result.message,result.sound);render();if(document.activeElement.disabled)$('unit').focus();}} // movement
 } // moveTo
 function start(){
  keyboardLocked=false;$('cursorPad').classList.remove('locked');clearTimeout(actionTimer);lastAction='';$('actionSpeech').textContent='';
@@ -267,7 +261,7 @@ function cycleCombatant(team,backward=false){
  if(team==='friendly')unitId=next.id;else targetId=next.id;
  cursor={x:next.x,y:next.y};render();A.play('select');
  const a=active(),details=squareAt(next.x,next.y)?.getAttribute('aria-label')||next.name;
- const availability=team==='enemy'&&a&&!g.done?E.weapons.filter(w=>E.canFire(a,next,w,g)).map(w=>w.name):[];
+ const availability=team==='enemy'&&a&&!g.done?E.weaponsFor(a).filter(w=>E.canFire(a,next,w,g)).map(w=>w.name):[];
  const suffix=team==='enemy'?(availability.length?' Available weapons: '+availability.join(', ')+'.':' No weapons currently available. '+(a?losText(a,next):'')):'';
  $('cursorSpeech').textContent=(team==='friendly'?'Commanding ':'Targeting ')+details+'. '+suffix;
 } // cycleCombatant
