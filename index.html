@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tactical Mech Sandbox</title><link rel="stylesheet" href="style.css?v=9"></head>
-<body><header><h1>Tactical Mech Sandbox</h1><p>Prototype 0.12 · Audio-first tactical combat</p></header>
-<main><section id="setup"><h2>Mission: Scrap Yard</h2><p>Destroy three hostile mechs. Each friendly mech can move up to four squares and fire twice per round. Enemy turns resolve when you end the round. Obstacles and other mechs block movement and firing lines; adjacent obstacles provide cover.</p><button id="start">Start mission</button></section>
+<body><header><h1>Tactical Mech Sandbox</h1><p>Prototype 0.13 · Audio-first tactical combat</p></header>
+<main><section id="setup"><h2>Mission: Scrap Yard</h2><p>Destroy three hostile mechs. Each friendly mech can move up to four squares and fire twice per round. Enemy turns resolve when you end the round. Obstacles and other mechs block movement and firing lines; obstacles on the attack-facing side provide directional cover.</p><button id="start">Start mission</button></section>
 <section id="audioSettings" aria-label="Audio settings"><label><input type="checkbox" id="sound" checked> Sound effects</label> <label for="volume">Effects volume</label><input id="volume" type="range" min="0" max="100" value="55"><button id="testSound">Test sound</button><p id="audioStatus" role="status">Audio not initialized</p></section>
 <div id="game" hidden>
 
@@ -12,4 +12,4 @@
 <section><h3>Battlefield intelligence</h3><button id="scan">Scan battlefield</button><button id="terrain">Scan nearby terrain</button><p id="scanResult"></p></section>
 <button id="end">End friendly round</button><button id="restart">Restart mission</button>
 <section><h3>Combat log</h3><ol id="log"></ol></section></div></div></main><div id="actionSpeech" class="sr-only" role="alert" aria-atomic="true"></div><dialog id="squareMenu" aria-labelledby="squareMenuTitle"><h2 id="squareMenuTitle"></h2><div id="squareActions"></div><p id="menuFeedback" role="status" aria-live="polite" aria-atomic="true"></p></dialog>
-<script type="module" src="main.js?v=12"></script></body></html>
+<script type="module" src="main.js?v=13"></script></body></html>
